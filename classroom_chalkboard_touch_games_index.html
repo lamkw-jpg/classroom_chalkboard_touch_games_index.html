@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黑板五子棋 - Classroom Chalkboard Gomoku</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti for winning effects -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts for Chalk Aesthetic -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Noto+Sans+TC:wght@500;700;900&family=Permanent+Marker&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom Blackboard Styling & Chalk Effects */
+        body {
+            font-family: 'Noto Sans TC', 'Caveat', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            overflow: hidden;
+            background-color: #1a2620;
+        }
+
+        .chalk-board {
+            background: #1b2821;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.65) 100%),
+                repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.015) 10px, transparent 10px, transparent 20px);
+            box-shadow: inset 0 0 120px rgba(0,0,0,0.85);
+        }
+
+        .wooden-frame {
+            border: 14px solid #4a2e16;
+            border-image: linear-gradient(to bottom, #7a4a22, #4A2E16, #2E1A0C) 1 100%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(0, 0, 0, 0.9);
+        }
+
+        .chalk-text {
+            color: #f8fafc;
+            text-shadow: 
+                0 0 2px rgba(255,255,255,0.8),
+                1px 1px 2px rgba(255,255,255,0.4),
+                -1px -1px 2px rgba(0,0,0,0.6);
+            font-family: 'Permanent Marker', 'Noto Sans TC', cursive;
+        }
+
+        .chalk-text-yellow {
+            color: #fef08a;
+            text-shadow: 
+                0 0 3px rgba(254,240,138,0.8),
+                1px 1px 2px rgba(254,240,138,0.4),
+                -1px -1px 2px rgba(0,0,0,0.6);
+            font-family: 'Permanent Marker', 'Noto Sans TC', cursive;
+        }
+
+        .chalk-border {
+            border: 3px dashed rgba(255, 255, 255, 0.65);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
+            border-radius: 18px;
+        }
+
+        .chalk-button {
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 3px solid rgba(255, 255, 255, 0.85);
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.15), 0 6px 12px rgba(0, 0, 0, 0.4);
+            transition: all 0.15s ease-out;
+            cursor: pointer;
+        }
+
+        .chalk-button:active {
+            transform: scale(0.95);
+            background-color: rgba(255, 255, 255, 0.25);
+            box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.4), 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Gomoku Cell & Piece Styling */
+        .gomoku-cell {
+            position: relative;
+            cursor: pointer;
+        }
+
+        /* Grid lines inside cell */
+        .gomoku-cell::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: rgba(255, 255, 255, 0.35);
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+        .gomoku-cell::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 2px;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.35);
+            transform: translateX(-50%);
+            z-index: 1;
+        }
+
+        .gomoku-piece {
+            position: absolute;
+            width: 82%;
+            height: 82%;
+            border-radius: 50%;
+            z-index: 10;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.6);
+            transition: transform 0.15s ease-out;
+        }
+
+        .piece-black {
+            background: radial-gradient(circle at 35% 35%, #444, #111 80%);
+            border: 2px solid #888;
+        }
+
+        .piece-white {
+            background: radial-gradient(circle at 35% 35%, #ffffff, #d1d5db 80%);
+            border: 2px solid #666;
+        }
+
+        /* Last Move Red Highlight Ring */
+        .last-move-ring {
+            position: absolute;
+            width: 40%;
+            height: 40%;
+            border: 3px solid #ef4444;
+            border-radius: 50%;
+            z-index: 12;
+            animation: ringPulse 1s infinite alternate;
+        }
+
+        @keyframes ringPulse {
+            0% { transform: scale(0.9); opacity: 0.8; }
+            100% { transform: scale(1.3); opacity: 1; }
+        }
+
+        /* Particles canvas */
+        #dustCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .banner-glow {
+            animation: glowPulse 1.5s infinite alternate;
+        }
+        @keyframes glowPulse {
+            0% { text-shadow: 0 0 10px #fef08a, 0 0 20px #fef08a; transform: scale(1); }
+            100% { text-shadow: 0 0 25px #fef08a, 0 0 50px #eab308; transform: scale(1.03); }
+        }
+    </style>
+</head>
+<body class="h-full w-full flex flex-col justify-between wooden-frame chalk-board relative overflow-hidden select-none">
+
+    <!-- Dust Particle Canvas -->
+    <canvas id="dustCanvas"></canvas>
+
+    <!-- HEADER / NAVIGATION BAR -->
+    <header class="w-full px-4 py-2 md:py-3 flex justify-between items-center z-20 border-b-2 border-white/20 bg-black/30 backdrop-blur-sm shrink-0">
+        <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-gamepad text-3xl md:text-4xl text-yellow-300"></i>
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold chalk-text tracking-wide">黑板五子棋 (Gomoku)</h1>
+                <p class="text-xs md:text-sm text-gray-300">任意方向先連成五棋即獲勝 (WIN)</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Board Size Toggle -->
+            <button onclick="toggleBoardSize()" id="sizeBtn" class="chalk-button px-3 py-1.5 rounded-2xl text-sm md:text-base font-bold chalk-text">
+                <i class="fa-solid fa-grid-2 mr-1"></i> <span id="sizeLabel">12 x 12 棋盤</span>
+            </button>
+
+            <!-- Mode Selector -->
+            <button onclick="toggleGameMode()" id="modeBtn" class="chalk-button px-4 py-2 rounded-2xl text-base md:text-lg font-bold chalk-text flex items-center space-x-2">
+                <i class="fa-solid fa-users text-cyan-300"></i>
+                <span id="modeLabel">雙人同桌對戰</span>
+            </button>
+
+            <!-- Sound Toggle -->
+            <button onclick="toggleAudio()" id="audioBtn" class="chalk-button p-2.5 md:p-3 rounded-full text-xl chalk-text">
+                <i class="fa-solid fa-volume-high text-green-400" id="audioIcon"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN GAME AREA -->
+    <main class="flex-1 relative w-full h-full p-2 md:p-4 flex flex-col md:flex-row items-center justify-center gap-4 z-10 overflow-hidden">
+        
+        <!-- SIDEBAR / SCOREBOARD & CONTROLS -->
+        <div class="w-full md:w-72 flex flex-row md:flex-col justify-between items-center gap-3 bg-black/40 p-4 rounded-3xl chalk-border shrink-0">
+            
+            <!-- Current Player Banner -->
+            <div class="w-full text-center py-3 px-4 bg-white/10 rounded-2xl border-2 border-white/40 shadow-inner">
+                <div class="text-xs md:text-sm text-gray-300">當前回合 Turn</div>
+                <div id="turn-indicator" class="text-xl md:text-3xl font-black chalk-text-yellow flex items-center justify-center space-x-2 mt-1">
+                    <span class="w-6 h-6 bg-stone-900 border-2 border-white rounded-full inline-block shadow"></span>
+                    <span>黑方落子</span>
+                </div>
+            </div>
+
+            <!-- Total Moves Counter -->
+            <div class="w-full grid grid-cols-2 gap-2 text-center">
+                <div class="bg-black/50 p-3 rounded-2xl border-2 border-white/30 flex flex-col items-center">
+                    <div class="w-6 h-6 bg-stone-900 border border-white rounded-full mb-1"></div>
+                    <div class="text-xs text-gray-300">黑棋總數</div>
+                    <div id="black-score" class="text-3xl md:text-4xl font-bold chalk-text">0</div>
+                </div>
+                <div class="bg-black/50 p-3 rounded-2xl border-2 border-white/30 flex flex-col items-center">
+                    <div class="w-6 h-6 bg-gray-100 border border-stone-800 rounded-full mb-1"></div>
+                    <div class="text-xs text-gray-300">白棋總數</div>
+                    <div id="white-score" class="text-3xl md:text-4xl font-bold chalk-text">0</div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="w-full flex md:flex-col space-x-2 md:space-x-0 md:space-y-2">
+                <button onclick="undoMove()" class="chalk-button flex-1 py-3 rounded-xl text-lg md:text-xl font-bold chalk-text">
+                    <i class="fa-solid fa-rotate-left mr-1"></i> 復原 (Undo)
+                </button>
+                <button onclick="initBoard()" class="chalk-button flex-1 py-3 rounded-xl text-lg md:text-xl font-bold chalk-text text-yellow-300">
+                    <i class="fa-solid fa-arrows-rotate mr-1"></i> 重新開始
+                </button>
+            </div>
+        </div>
+
+        <!-- BOARD WITH AXIS COORDINATES (1, 2, 3...) -->
+        <div class="flex-1 w-full h-full max-h-[82vh] aspect-square flex flex-col items-center justify-center p-1">
+            <div class="w-full h-full bg-emerald-950/80 rounded-2xl border-4 border-white/70 p-2 shadow-2xl flex flex-col relative overflow-hidden">
+                
+                <!-- TOP AXIS NUMBERS (1, 2, 3...) -->
+                <div id="top-axis" class="w-full h-7 flex pl-7 pr-1 items-center font-bold chalk-text text-yellow-200 text-sm md:text-base">
+                    <!-- Dynamically populated 1..N -->
+                </div>
+
+                <div class="flex-1 w-full flex overflow-hidden">
+                    <!-- LEFT AXIS NUMBERS (1, 2, 3...) -->
+                    <div id="left-axis" class="w-7 h-full flex flex-col items-center justify-around font-bold chalk-text text-yellow-200 text-sm md:text-base">
+                        <!-- Dynamically populated 1..N -->
+                    </div>
+
+                    <!-- GOMOKU GRID -->
+                    <div id="board-grid" class="flex-1 h-full grid gap-0 bg-emerald-900/40 rounded border border-white/30 relative">
+                        <!-- Dynamically populated cells -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- GIANT VICTORY BANNER OVERLAY -->
+    <div id="victoryOverlay" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex flex-col items-center justify-center p-4">
+        <div class="bg-stone-900 border-8 border-yellow-300 p-8 md:p-12 rounded-3xl max-w-2xl w-full chalk-border flex flex-col items-center space-y-8 text-center shadow-2xl">
+            <i class="fa-solid fa-trophy text-7xl md:text-9xl text-yellow-300 animate-bounce"></i>
+            
+            <h1 id="giantWinnerText" class="text-5xl md:text-7xl font-black chalk-text-yellow tracking-wider banner-glow">
+                黑方 WIN！
+            </h1>
+
+            <p id="finalScoreText" class="text-2xl md:text-3xl chalk-text text-cyan-300">
+                成功將 5 顆棋子連成一線！
+            </p>
+
+            <button onclick="closeModalAndRestart()" class="chalk-button bg-yellow-500/30 px-10 py-5 rounded-2xl chalk-text-yellow text-3xl font-bold w-full hover:bg-yellow-500/50">
+                <i class="fa-solid fa-play mr-3"></i> 再來一局 (New Game)
+            </button>
+        </div>
+    </div>
+
+    <!-- AUDIO & GOMOKU ENGINE JS -->
+    <script>
+        /* ================= Web Audio API Synthesizer ================= */
+        let audioCtx = null;
+        let isAudioMuted = false;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (isAudioMuted) return;
+            initAudio();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            if (type === 'place') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.exponentialRampToValueAtTime(120, now + 0.07);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.07);
+                osc.start(now);
+                osc.stop(now + 0.07);
+            } else if (type === 'win') {
+                [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((freq, idx) => {
+                    const subOsc = audioCtx.createOscillator();
+                    const subGain = audioCtx.createGain();
+                    subOsc.type = 'triangle';
+                    subOsc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                    subGain.gain.setValueAtTime(0.4, now + idx * 0.12);
+                    subGain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.4);
+                    subOsc.connect(subGain);
+                    subGain.connect(audioCtx.destination);
+                    subOsc.start(now + idx * 0.12);
+                    subOsc.stop(now + idx * 0.12 + 0.4);
+                });
+            }
+        }
+
+        function toggleAudio() {
+            isAudioMuted = !isAudioMuted;
+            const icon = document.getElementById('audioIcon');
+            if (isAudioMuted) {
+                icon.className = 'fa-solid fa-volume-xmark text-red-400';
+            } else {
+                icon.className = 'fa-solid fa-volume-high text-green-400';
+                playSound('place');
+            }
+        }
+
+        /* ================= Chalk Dust Particles ================= */
+        const canvas = document.getElementById('dustCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class ChalkParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * 6 + 2;
+                this.speedX = (Math.random() - 0.5) * 5;
+                this.speedY = (Math.random() - 0.5) * 5;
+                this.alpha = 1;
+                this.color = ['#ffffff', '#fef08a', '#4ade80'][Math.floor(Math.random() * 3)];
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.alpha -= 0.035;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function spawnDust(x, y) {
+            for (let i = 0; i < 12; i++) {
+                particles.push(new ChalkParticle(x, y));
+            }
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, index) => {
+                p.update();
+                p.draw();
+                if (p.alpha <= 0) particles.splice(index, 1);
+            });
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        /* ================= GOMOKU GAME ENGINE ================= */
+        let boardSize = 12; // Standard default 12x12
+        const EMPTY = 0;
+        const BLACK = 1;
+        const WHITE = 2;
+
+        let board = [];
+        let currentPlayer = BLACK;
+        let isVsAI = false;
+        let history = [];
+        let lastMove = null;
+        let gameActive = true;
+
+        function toggleBoardSize() {
+            boardSize = boardSize === 12 ? 10 : (boardSize === 10 ? 8 : 12);
+            document.getElementById('sizeLabel').innerText = `${boardSize} x ${boardSize} 棋盤`;
+            initBoard();
+        }
+
+        function toggleGameMode() {
+            isVsAI = !isVsAI;
+            document.getElementById('modeLabel').innerText = isVsAI ? "單人人機對戰" : "雙人同桌對戰";
+            initBoard();
+        }
+
+        function initBoard() {
+            board = Array(boardSize).fill(null).map(() => Array(boardSize).fill(EMPTY));
+            currentPlayer = BLACK;
+            history = [];
+            lastMove = null;
+            gameActive = true;
+
+            renderAxes();
+            renderBoard();
+            updateScores();
+            updateTurnUI();
+        }
+
+        function renderAxes() {
+            const topAxis = document.getElementById('top-axis');
+            const leftAxis = document.getElementById('left-axis');
+
+            topAxis.innerHTML = '';
+            leftAxis.innerHTML = '';
+
+            for (let i = 1; i <= boardSize; i++) {
+                const colLabel = document.createElement('div');
+                colLabel.className = 'flex-1 text-center';
+                colLabel.innerText = i;
+                topAxis.appendChild(colLabel);
+
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'flex-1 flex items-center justify-center';
+                rowLabel.innerText = i;
+                leftAxis.appendChild(rowLabel);
+            }
+        }
+
+        function placePiece(r, c, e = null) {
+            if (!gameActive || board[r][c] !== EMPTY) return;
+
+            if (e) spawnDust(e.clientX, e.clientY);
+
+            // Record history
+            history.push({
+                board: JSON.parse(JSON.stringify(board)),
+                player: currentPlayer,
+                lastMove: lastMove ? { ...lastMove } : null
+            });
+
+            playSound('place');
+
+            board[r][c] = currentPlayer;
+            lastMove = { r, c };
+
+            renderBoard();
+            updateScores();
+
+            // Check if win (5 in a row)
+            if (checkWin(r, c, currentPlayer)) {
+                gameActive = false;
+                setTimeout(showVictory, 200);
+                return;
+            }
+
+            // Switch turn
+            currentPlayer = currentPlayer === BLACK ? WHITE : BLACK;
+            updateTurnUI();
+
+            // AI Move logic if AI mode
+            if (isVsAI && currentPlayer === WHITE && gameActive) {
+                setTimeout(makeAIMove, 400);
+            }
+        }
+
+        function checkWin(r, c, player) {
+            const dirs = [
+                [[0, 1], [0, -1]],   // Horizontal
+                [[1, 0], [-1, 0]],   // Vertical
+                [[1, 1], [-1, -1]],  // Main Diagonal
+                [[1, -1], [-1, 1]]   // Anti Diagonal
+            ];
+
+            for (const dirPair of dirs) {
+                let count = 1;
+                for (const [dr, dc] of dirPair) {
+                    let nr = r + dr;
+                    let nc = c + dc;
+                    while (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && board[nr][nc] === player) {
+                        count++;
+                        nr += dr;
+                        nc += dc;
+                    }
+                }
+                if (count >= 5) return true;
+            }
+            return false;
+        }
+
+        function makeAIMove() {
+            if (!gameActive) return;
+
+            // Simple AI: Find highest priority move (block user or win)
+            let bestMove = null;
+            let maxScore = -1;
+
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    if (board[r][c] === EMPTY) {
+                        let score = evaluateCell(r, c);
+                        if (score > maxScore) {
+                            maxScore = score;
+                            bestMove = { r, c };
+                        }
+                    }
+                }
+            }
+
+            if (bestMove) {
+                placePiece(bestMove.r, bestMove.c);
+            }
+        }
+
+        function evaluateCell(r, c) {
+            // Heuristic score for AI placement
+            let score = 0;
+            // Prefer center positions
+            const centerDist = Math.abs(r - boardSize / 2) + Math.abs(c - boardSize / 2);
+            score += (10 - centerDist);
+
+            // Check line threats for AI (WHITE) and Player (BLACK)
+            score += getLineCount(r, c, WHITE) * 3;
+            score += getLineCount(r, c, BLACK) * 2; // Defense
+            return score;
+        }
+
+        function getLineCount(r, c, player) {
+            let maxLine = 0;
+            const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+            dirs.forEach(([dr, dc]) => {
+                let count = 0;
+                [1, -1].forEach(sign => {
+                    let nr = r + dr * sign;
+                    let nc = c + dc * sign;
+                    while (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && board[nr][nc] === player) {
+                        count++;
+                        nr += dr * sign;
+                        nc += dc * sign;
+                    }
+                });
+                if (count > maxLine) maxLine = count;
+            });
+            return maxLine;
+        }
+
+        function updateScores() {
+            let blackCount = 0;
+            let whiteCount = 0;
+
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    if (board[r][c] === BLACK) blackCount++;
+                    if (board[r][c] === WHITE) whiteCount++;
+                }
+            }
+
+            document.getElementById('black-score').innerText = blackCount;
+            document.getElementById('white-score').innerText = whiteCount;
+        }
+
+        function showVictory() {
+            playSound('win');
+            const banner = document.getElementById('giantWinnerText');
+            if (currentPlayer === BLACK) {
+                banner.innerText = "黑方 WIN！";
+                banner.className = "text-5xl md:text-7xl font-black chalk-text-yellow banner-glow";
+            } else {
+                banner.innerText = "白方 WIN！";
+                banner.className = "text-5xl md:text-7xl font-black text-white banner-glow";
+            }
+
+            document.getElementById('victoryOverlay').classList.remove('hidden');
+            confetti({ particleCount: 150, spread: 100, origin: { y: 0.5 } });
+        }
+
+        function undoMove() {
+            if (history.length === 0 || !gameActive) return;
+
+            let lastState = history.pop();
+            board = lastState.board;
+            currentPlayer = lastState.player;
+            lastMove = lastState.lastMove;
+
+            if (isVsAI && history.length > 0 && currentPlayer === WHITE) {
+                lastState = history.pop();
+                board = lastState.board;
+                currentPlayer = lastState.player;
+                lastMove = lastState.lastMove;
+            }
+
+            renderBoard();
+            updateScores();
+            updateTurnUI();
+        }
+
+        function renderBoard() {
+            const grid = document.getElementById('board-grid');
+            grid.style.gridTemplateColumns = `repeat(${boardSize}, minmax(0, 1fr))`;
+            grid.style.gridTemplateRows = `repeat(${boardSize}, minmax(0, 1fr))`;
+            grid.innerHTML = '';
+
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'gomoku-cell w-full h-full flex items-center justify-center hover:bg-white/10 transition';
+                    cell.onclick = (e) => placePiece(r, c, e);
+
+                    if (board[r][c] !== EMPTY) {
+                        const isBlack = board[r][c] === BLACK;
+                        const piece = document.createElement('div');
+                        piece.className = `gomoku-piece ${isBlack ? 'piece-black' : 'piece-white'}`;
+                        cell.appendChild(piece);
+                    }
+
+                    // Red ring highlight on last placed move
+                    if (lastMove && lastMove.r === r && lastMove.c === c) {
+                        const ring = document.createElement('div');
+                        ring.className = 'last-move-ring';
+                        cell.appendChild(ring);
+                    }
+
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function updateTurnUI() {
+            const turnIndicator = document.getElementById('turn-indicator');
+            if (currentPlayer === BLACK) {
+                turnIndicator.innerHTML = `<span class="w-6 h-6 bg-stone-900 border-2 border-white rounded-full inline-block shadow"></span><span>黑方落子</span>`;
+            } else {
+                turnIndicator.innerHTML = `<span class="w-6 h-6 bg-gray-100 border-2 border-stone-800 rounded-full inline-block shadow"></span><span>白方落子</span>`;
+            }
+        }
+
+        function closeModalAndRestart() {
+            document.getElementById('victoryOverlay').classList.add('hidden');
+            initBoard();
+        }
+
+        /* ================= INITIALIZATION ================= */
+        window.onload = function() {
+            initBoard();
+        };
+    </script>
+</body>
+</html>
